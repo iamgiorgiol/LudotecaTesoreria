@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>Report Movimenti</title>
+<link rel="stylesheet" href="style.css">
+
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+
+</head>
+<body>
+
+<div class="nav">
+    <a href="index.html">Inserimento</a>
+    <a href="report.html">Report</a>
+    <a href="grafici.html">Grafici</a>
+</div>
+
+<div class="container">
+    <h2>Report Entrate / Uscite</h2>
+    <div id="tabella"></div>
+</div>
+
+<script>
+google.charts.load('current', {'packages':['table']});
+google.charts.setOnLoadCallback(drawTable);
+
+function drawTable() {
+    const query = new google.visualization.Query(
+        "https://docs.google.com/spreadsheets/d/1AWL9t8xEYnSYMJFR4y7tAfMN2Tmxc07RtM0ZH3hYmbs/gviz/tq?tqx=out:json"
+    );
+    query.send(handleResponse);
+}
+
+function handleResponse(response) {
+    const data = response.getDataTable();
+
+    // Rinomino le colonne per leggibilità
+    data.setColumnLabel(0, "Timestamp");
+    data.setColumnLabel(1, "Tipo");
+    data.setColumnLabel(2, "Data");
+    data.setColumnLabel(3, "Descrizione");
+    data.setColumnLabel(4, "Valore (€)");
+    data.setColumnLabel(5, "Categoria");
+
+    const table = new google.visualization.Table(document.getElementById("tabella"));
+    table.draw(data, {showRowNumber: true, width: '100%'});
+}
+</script>
+
+</body>
+</html>
+

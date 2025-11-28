@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard Grafica</title>
+<link rel="stylesheet" href="style.css">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+
+</head>
+<body>
+
+<div class="nav">
+    <a href="index.html">Inserimento</a>
+    <a href="report.html">Report</a>
+    <a href="grafici.html">Grafici</a>
+</div>
+
+<div class="container">
+    <h2>Dashboard Entrate / Uscite</h2>
+
+    <canvas id="trend"></canvas>
+    <canvas id="categorie"></canvas>
+    <canvas id="totali"></canvas>
+</div>
+
+<script>
+google.charts.load("current", {packages:["corechart"]});
+google.charts.setOnLoadCallback(loadData);
+
+function loadData() {
+    let q = new google.visualization.Query(
+        "https://docs.google.com/spreadsheets/d/1i-9fk3zeqZDa_PRIHVkkb-3n52eDoCXpzxRrIe_dK9A/gviz/tq?tqx=out:json"
+    );
+    q.send(handleResponse);
+}
+
+function handleResponse(res) {
+    let table = res.getDataTable();
+
+    let dati = [];
+    for (let i = 0; i < table.getNumberOfRows(); i++) {
+        dati.push({
+            timestamp: table.getValue(i, 0),
+            tipo:      table.getValue(i, 1),
+            data:      table.getValue(i, 2),
+            descr:     table.getValue(i, 3),
+            valore:    parseFloat(table.getValue(i, 4)),
+            categoria: table.getValue(i, 5)
+        });
+    }
+
+    renderCharts(dati);
+}
+
+function renderCharts(dati) {
+
+    // Pie Entrate/Uscite
+    const totEntrate = dati
+        .filter(d => d.tipo === "entrata")
+        .reduce((s,v)=>s+v.valore,0);
+
+    const totUscite = dati
+        .filter(d => d.tipo === "uscita")
+        .reduce((s,v)=>s+v.valore,0);
+
+    new Chart(document.getElementById("totali"), {
+        type: "pie",
+        data: {
+            labels: ["Entrate", "Uscite"],
+            datasets: [{
+                data: [totEntrate, totUscite],
+                backgroundColor: ["#4CAF50", "#F44336"]
+            }]
+        }
+    });
+
+    // Grafico categorie
+    let cat = {};
+    dati.forEach(d => {
+        cat[d.categoria] = (cat[d.categoria] || 0) + d.valore;
+    });
+
+    new Chart(document.getElementById("categorie"), {
+        type: "bar",
+        data: {
+            labels: Object.keys(cat),
+            datasets: [{
+                label: "Per categoria",
+                data: Object.values(cat),
+                backgroundColor: "#2196F3"
+            }]
+        }
+    });
+
+    // Grafico trend mensile
+    let mesi = {};
+    dati.forEach(d => {
+        if (!d.data) return;
+        let m = d.data.substring(0,7);
+        mesi[m] = (mesi[m] || 0) + d.valore;
+    });
+
+    new Chart(document.getElementById("trend"), {
+        type: "line",
+        data: {
+            labels: Object.keys(mesi),
+            datasets: [{
+                label: "Totale mensile",
+                data: Object.values(mesi),
+                borderColor: "#673AB7",
+                fill: false
+            }]
+        }
+    });
+}
+</script>
+
+</body>
+</html>
+
