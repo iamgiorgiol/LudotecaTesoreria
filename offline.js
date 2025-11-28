@@ -1,3 +1,5 @@
+const FORM_URL = "https://docs.google.com/forms/u/0/d/1i-9fk3zeqZDa_PRIHVkkb-3n52eDoCXpzxRrIe_dK9A/formResponse";
+
 function salvaOffline(movimento) {
     let lista = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
     lista.push(movimento);
