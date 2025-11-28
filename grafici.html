@@ -31,6 +31,7 @@ google.charts.setOnLoadCallback(loadData);
 
 function loadData() {
     let q = new google.visualization.Query(
+        // Spreadsheet ID from your confirmed URL
         "https://docs.google.com/spreadsheets/d/1AWL9t8xEYnSYMJFR4y7tAfMN2Tmxc07RtM0ZH3hYmbs/gviz/tq?tqx=out:json"
     );
     q.send(handleResponse);
@@ -43,20 +44,80 @@ function handleResponse(res) {
     for (let i = 0; i < table.getNumberOfRows(); i++) {
         dati.push({
             timestamp: table.getValue(i, 0),
-            tipo:      table.getValue(i, 1),
-            data:      table.getValue(i, 2),
-            descr:     table.getValue(i, 3),
-            valore:    parseFloat(table.getValue(i, 4)),
+            tipo: table.getValue(i, 1),
+            data: table.getValue(i, 2),
+            descrizione: table.getValue(i, 3),
+            valore: parseFloat(table.getValue(i, 4)),
             categoria: table.getValue(i, 5)
         });
     }
 
-    renderCharts(dati);
-}
+    //-----------------------------------------------------
+    // Grafico trend mensile: SEPARAZIONE ENTRATE/USCITE (NEW LOGIC)
+    //-----------------------------------------------------
+    let monthlyData = {};
+    let monthLabels = new Set(); 
+    
+    dati.forEach(d => {
+        if (!d.data) return;
+        // Extracts YYYY-MM
+        let m = d.data.substring(0, 7); 
+        monthLabels.add(m);
 
-function renderCharts(dati) {
+        if (!monthlyData[m]) {
+            monthlyData[m] = { entrate: 0, uscite: 0 };
+        }
 
-    // Pie Entrate/Uscite
+        if (d.tipo === 'entrata') {
+            monthlyData[m].entrate += d.valore;
+        } else if (d.tipo === 'uscita') {
+            monthlyData[m].uscite += d.valore;
+        }
+    });
+    
+    // Sort months for chronological order
+    const sortedMonths = Array.from(monthLabels).sort(); 
+    
+    // Prepare data arrays
+    const entrateData = sortedMonths.map(month => monthlyData[month] ? monthlyData[month].entrate : 0);
+    const usciteData = sortedMonths.map(month => monthlyData[month] ? monthlyData[month].uscite : 0);
+    
+    // Format month labels (e.g., "2023-11" -> "Nov 2023")
+    const formattedLabels = sortedMonths.map(m => {
+        const parts = m.split('-');
+        const date = new Date(parts[0], parts[1] - 1, 1);
+        return date.toLocaleDateString('it-IT', { year: 'numeric', month: 'short' });
+    });
+
+    // Draw the new Grouped Bar Chart
+    new Chart(document.getElementById("trend"), {
+        type: "bar", // Changed to bar chart
+        data: {
+            labels: formattedLabels, 
+            datasets: [{
+                label: "Entrate",
+                data: entrateData,
+                backgroundColor: "#4CAF50", // Green
+            },
+            {
+                label: "Uscite",
+                data: usciteData,
+                backgroundColor: "#F44336", // Red
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    //-----------------------------------------------------
+    // Grafico totali (Pie Chart - Current Year Totals)
+    //-----------------------------------------------------
     const totEntrate = dati
         .filter(d => d.tipo === "entrata")
         .reduce((s,v)=>s+v.valore,0);
@@ -76,7 +137,9 @@ function renderCharts(dati) {
         }
     });
 
-    // Grafico categorie
+    //-----------------------------------------------------
+    // Grafico categorie (Bar Chart - Net Totals by Category)
+    //-----------------------------------------------------
     let cat = {};
     dati.forEach(d => {
         cat[d.categoria] = (cat[d.categoria] || 0) + d.valore;
@@ -94,26 +157,6 @@ function renderCharts(dati) {
         }
     });
 
-    // Grafico trend mensile
-    let mesi = {};
-    dati.forEach(d => {
-        if (!d.data) return;
-        let m = d.data.substring(0,7);
-        mesi[m] = (mesi[m] || 0) + d.valore;
-    });
-
-    new Chart(document.getElementById("trend"), {
-        type: "line",
-        data: {
-            labels: Object.keys(mesi),
-            datasets: [{
-                label: "Totale mensile",
-                data: Object.values(mesi),
-                borderColor: "#673AB7",
-                fill: false
-            }]
-        }
-    });
 }
 </script>
 
