@@ -19,6 +19,7 @@
 <div class="container">
     <h2>Report Entrate / Uscite</h2>
     <div id="tabella"></div>
+    <div id="riepilogo-finanziario"></div>
 </div>
 
 <script>
@@ -35,7 +36,7 @@ function drawTable() {
 function handleResponse(response) {
     const data = response.getDataTable();
 
-    // Rinomino le colonne per leggibilità
+    // Rinomino le colonne per leggibilità (Existing code)
     data.setColumnLabel(0, "Timestamp");
     data.setColumnLabel(1, "Tipo");
     data.setColumnLabel(2, "Data");
@@ -43,8 +44,49 @@ function handleResponse(response) {
     data.setColumnLabel(4, "Valore (€)");
     data.setColumnLabel(5, "Categoria");
 
-    const table = new google.visualization.Table(document.getElementById("tabella"));
-    table.draw(data, {showRowNumber: true, width: '100%'});
+    // 1. Draw the table
+    const table = new google.visualization.Table(document.getElementById('tabella'));
+    // The width is set to 100% to fill the new 900px container width
+    table.draw(data, {showRowNumber: false, width: '100%', height: '100%'});
+
+    // 2. Calculate Totals (NEW LOGIC)
+    let totalEntrate = 0;
+    let totalUscite = 0;
+    const valueColumnIndex = 4; // Column index for "Valore (€)"
+
+    for (let i = 0; i < data.getNumberOfRows(); i++) {
+        // We get the raw value from the column
+        const tipo = data.getValue(i, 1);
+        const valore = data.getValue(i, valueColumnIndex);
+
+        if (tipo === 'entrata') {
+            // Must convert to number for summing
+            totalEntrate += parseFloat(valore); 
+        } else if (tipo === 'uscita') {
+            totalUscite += parseFloat(valore);
+        }
+    }
+
+    const differenza = totalEntrate - totalUscite;
+
+    // Helper to format currency
+    const formatter = new Intl.NumberFormat('it-IT', {
+        style: 'currency',
+        currency: 'EUR',
+    });
+
+    // 3. Display Totals (NEW LOGIC)
+    const summaryHtml = `
+        <div style="margin-top: 30px; padding: 15px; border: 1px solid #ccc; border-radius: 8px; background-color: #f9f9f9;">
+            <h3>Riepilogo Finanziario</h3>
+            <p><strong>Totale Entrate:</strong> <span style="color: green;">${formatter.format(totalEntrate)}</span></p>
+            <p><strong>Totale Uscite:</strong> <span style="color: red;">${formatter.format(totalUscite)}</span></p>
+            <hr style="border-top: 1px dashed #ccc;">
+            <p><strong>Saldo Finale:</strong> <span style="font-weight: bold; color: ${differenza >= 0 ? 'green' : 'red'}; font-size: 1.2em;">${formatter.format(differenza)}</span></p>
+        </div>
+    `;
+
+    document.getElementById('riepilogo-finanziario').innerHTML = summaryHtml;
 }
 </script>
 
