@@ -19,24 +19,34 @@
 <div class="container">
     <h2>Report Entrate / Uscite</h2>
     <div id="tabella"></div>
+
+    <button id="deleteButton" onclick="deleteSelectedRows()" disabled style="background-color: #f44336; margin-top: 20px;">
+        Cancella Selezionati
+    </button>
+    <div id="deleteStatus" class="alert success" style="display: none;"></div>
     <div id="riepilogo-finanziario"></div>
 </div>
 
 <script>
+// IMPORTANT: You MUST replace this with the URL generated in Step 2.
+const DELETE_API_URL = "https://script.google.com/macros/s/AKfycbw2PZJsRtRqKhV7U-bAivXshoK_skxg0NGdbrt8R04G0LfOzg6Czqrkrq2cQp4ClxeinQ/exec"; 
+const SPREADSHEET_ID = "1AWL9t8xEYnSYMJFR4y7tAfMN2Tmxc07RtM0ZH3hYmbs";
+
 google.charts.load('current', {'packages':['table']});
 google.charts.setOnLoadCallback(drawTable);
 
 function drawTable() {
     const query = new google.visualization.Query(
-        "https://docs.google.com/spreadsheets/d/1AWL9t8xEYnSYMJFR4y7tAfMN2Tmxc07RtM0ZH3hYmbs/gviz/tq?tqx=out:json"
+        `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json`
     );
     query.send(handleResponse);
 }
 
+// Function to handle fetching and displaying data
 function handleResponse(response) {
     const data = response.getDataTable();
 
-    // Rinomino le colonne per leggibilità (Existing code)
+    // Rinomino le colonne per leggibilità (Existing logic)
     data.setColumnLabel(0, "Timestamp");
     data.setColumnLabel(1, "Tipo");
     data.setColumnLabel(2, "Data");
@@ -44,23 +54,32 @@ function handleResponse(response) {
     data.setColumnLabel(4, "Valore (€)");
     data.setColumnLabel(5, "Categoria");
 
+    // NEW LOGIC: Prepare data for deletion (add checkbox column)
+    const view = prepareDataTableForDeletion(data);
+    
     // 1. Draw the table
     const table = new google.visualization.Table(document.getElementById('tabella'));
-    // The width is set to 100% to fill the new 900px container width
-    table.draw(data, {showRowNumber: false, width: '100%', height: '100%'});
+    table.draw(view, {showRowNumber: false, width: '100%', height: '100%', allowHtml: true});
 
-    // 2. Calculate Totals (NEW LOGIC)
+    // Add event listener to enable/disable the delete button
+    document.getElementById('tabella').addEventListener('change', function(e) {
+        if (e.target.type === 'checkbox') {
+            const checkedBoxes = document.querySelectorAll('#tabella input[type="checkbox"]:checked');
+            document.getElementById('deleteButton').disabled = checkedBoxes.length === 0;
+        }
+    });
+
+
+    // 2. Calculate and Display Totals (Existing logic)
     let totalEntrate = 0;
     let totalUscite = 0;
-    const valueColumnIndex = 4; // Column index for "Valore (€)"
+    const valueColumnIndex = 4;
 
     for (let i = 0; i < data.getNumberOfRows(); i++) {
-        // We get the raw value from the column
         const tipo = data.getValue(i, 1);
         const valore = data.getValue(i, valueColumnIndex);
 
         if (tipo === 'entrata') {
-            // Must convert to number for summing
             totalEntrate += parseFloat(valore); 
         } else if (tipo === 'uscita') {
             totalUscite += parseFloat(valore);
@@ -68,14 +87,8 @@ function handleResponse(response) {
     }
 
     const differenza = totalEntrate - totalUscite;
+    const formatter = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' });
 
-    // Helper to format currency
-    const formatter = new Intl.NumberFormat('it-IT', {
-        style: 'currency',
-        currency: 'EUR',
-    });
-
-    // 3. Display Totals (NEW LOGIC)
     const summaryHtml = `
         <div style="margin-top: 30px; padding: 15px; border: 1px solid #ccc; border-radius: 8px; background-color: #f9f9f9;">
             <h3>Riepilogo Finanziario</h3>
@@ -88,6 +101,78 @@ function handleResponse(response) {
 
     document.getElementById('riepilogo-finanziario').innerHTML = summaryHtml;
 }
+
+// NEW FUNCTION: Prepares a new table view with a checkbox for deletion
+function prepareDataTableForDeletion(data) {
+    const view = new google.visualization.DataView(data);
+    
+    // Add new column for the checkbox
+    view.addColumn({
+        type: 'string',
+        label: 'Cancella',
+        calc: function(data, row) {
+            // The timestamp is the unique ID for the row (Column 0)
+            const timestamp = data.getValue(row, 0); 
+            return `<input type="checkbox" data-timestamp="${timestamp}" style="width: auto; margin: 0;">`;
+        }
+    }, 0); // Insert as the first column
+
+    // Exclude the original Timestamp column from display (it's now in the checkbox data)
+    const columnsToDisplay = [];
+    for (let i = 1; i < data.getNumberOfColumns(); i++) {
+        columnsToDisplay.push(i);
+    }
+    view.setColumns([0, ...columnsToDisplay]);
+
+    return view;
+}
+
+
+// NEW FUNCTION: Sends selected timestamps to the Apps Script API for deletion
+async function deleteSelectedRows() {
+    if (DELETE_API_URL === "YOUR_APPS_SCRIPT_WEB_APP_URL") {
+        alert("ERRORE: Devi prima configurare e inserire la DELETE_API_URL dallo Step 2.");
+        return;
+    }
+
+    const checkedBoxes = document.querySelectorAll('#tabella input[type="checkbox"]:checked');
+    if (checkedBoxes.length === 0) return;
+
+    const timestamps = Array.from(checkedBoxes).map(cb => cb.dataset.timestamp);
+    
+    showDeleteStatus(`Cancellazione di ${timestamps.length} movimenti in corso...`, false);
+    document.getElementById('deleteButton').disabled = true;
+
+    try {
+        const response = await fetch(DELETE_API_URL, {
+            method: 'POST',
+            mode: 'no-cors', // Must be no-cors for Apps Script POST
+            body: JSON.stringify({ timestamps: timestamps })
+        });
+
+        // Since it's 'no-cors', we can only rely on the browser not throwing an error.
+        // We will assume success and just reload the table after a delay.
+        
+        showDeleteStatus(`Cancellazione completata. Ricarico dati...`, false);
+        setTimeout(drawTable, 2000); // Reload table after 2 seconds
+    
+    } catch (e) {
+        showDeleteStatus("Errore di rete o connessione con il servizio di cancellazione.", true);
+        document.getElementById('deleteButton').disabled = false;
+        console.error("Deletion Error:", e);
+    }
+}
+
+function showDeleteStatus(message, isError) {
+    const statusDiv = document.getElementById('deleteStatus');
+    statusDiv.innerHTML = message;
+    statusDiv.className = isError ? 'alert error' : 'alert success';
+    statusDiv.style.display = 'block';
+    setTimeout(() => {
+        statusDiv.style.display = 'none';
+    }, 5000);
+}
+
 </script>
 
 </body>
