@@ -28,8 +28,8 @@
 </div>
 
 <script>
-// IMPORTANT: You MUST replace this with the URL generated in Step 2.
-const DELETE_API_URL = "https://script.google.com/macros/s/AKfycbw2PZJsRtRqKhV7U-bAivXshoK_skxg0NGdbrt8R04G0LfOzg6Czqrkrq2cQp4ClxeinQ/exec"; 
+// IMPORTANT: Re-paste the URL you got from deploying the Deletion Apps Script here.
+const DELETE_API_URL = "YOUR_APPS_SCRIPT_WEB_APP_URL"; 
 const SPREADSHEET_ID = "1AWL9t8xEYnSYMJFR4y7tAfMN2Tmxc07RtM0ZH3hYmbs";
 
 google.charts.load('current', {'packages':['table']});
@@ -44,6 +44,12 @@ function drawTable() {
 
 // Function to handle fetching and displaying data
 function handleResponse(response) {
+    // Check for error in query response
+    if (response.isError()) {
+        document.getElementById('tabella').innerHTML = 'Errore nel caricamento dei dati: ' + response.getMessage();
+        return;
+    }
+    
     const data = response.getDataTable();
 
     // Rinomino le colonne per leggibilità (Existing logic)
@@ -55,6 +61,7 @@ function handleResponse(response) {
     data.setColumnLabel(5, "Categoria");
 
     // NEW LOGIC: Prepare data for deletion (add checkbox column)
+    // The fix is here: we now define all columns (calculated + data) in one array.
     const view = prepareDataTableForDeletion(data);
     
     // 1. Draw the table
@@ -70,10 +77,10 @@ function handleResponse(response) {
     });
 
 
-    // 2. Calculate and Display Totals (Existing logic)
+    // 2. Calculate and Display Totals (Existing logic - uses the original 'data' table)
     let totalEntrate = 0;
     let totalUscite = 0;
-    const valueColumnIndex = 4;
+    const valueColumnIndex = 4; // Column index for "Valore (€)" in the original 'data' table
 
     for (let i = 0; i < data.getNumberOfRows(); i++) {
         const tipo = data.getValue(i, 1);
@@ -102,27 +109,30 @@ function handleResponse(response) {
     document.getElementById('riepilogo-finanziario').innerHTML = summaryHtml;
 }
 
-// NEW FUNCTION: Prepares a new table view with a checkbox for deletion
+// CORRECTED FUNCTION: Prepares a new table view with a checkbox for deletion
 function prepareDataTableForDeletion(data) {
-    const view = new google.visualization.DataView(data);
+    // Array to hold the final structure of the columns to display
+    const columnsToDisplay = [];
     
-    // Add new column for the checkbox
-    view.addColumn({
+    // Column 0 (New): The checkbox column (calculated using original data column 0: Timestamp)
+    columnsToDisplay.push({
         type: 'string',
         label: 'Cancella',
         calc: function(data, row) {
-            // The timestamp is the unique ID for the row (Column 0)
             const timestamp = data.getValue(row, 0); 
             return `<input type="checkbox" data-timestamp="${timestamp}" style="width: auto; margin: 0;">`;
         }
-    }, 0); // Insert as the first column
+    });
 
-    // Exclude the original Timestamp column from display (it's now in the checkbox data)
-    const columnsToDisplay = [];
+    // Columns 1 to N (Original data columns 1 to N: Tipo, Data, Descrizione, Valore, Categoria)
+    // We start from index 1 because index 0 (Timestamp) is now used in the checkbox calculation.
     for (let i = 1; i < data.getNumberOfColumns(); i++) {
         columnsToDisplay.push(i);
     }
-    view.setColumns([0, ...columnsToDisplay]);
+    
+    // Create the DataView and set all columns simultaneously
+    const view = new google.visualization.DataView(data);
+    view.setColumns(columnsToDisplay); // This is the fixed and simplified part
 
     return view;
 }
@@ -130,8 +140,8 @@ function prepareDataTableForDeletion(data) {
 
 // NEW FUNCTION: Sends selected timestamps to the Apps Script API for deletion
 async function deleteSelectedRows() {
-    if (DELETE_API_URL === "YOUR_APPS_SCRIPT_WEB_APP_URL") {
-        alert("ERRORE: Devi prima configurare e inserire la DELETE_API_URL dallo Step 2.");
+    if (DELETE_API_URL === "YOUR_APPS_SCRIPT_WEB_APP_URL" || !DELETE_API_URL.startsWith('http')) {
+        showDeleteStatus("ERRORE: Devi prima configurare e inserire la DELETE_API_URL dallo Step 2.", true);
         return;
     }
 
@@ -144,15 +154,14 @@ async function deleteSelectedRows() {
     document.getElementById('deleteButton').disabled = true;
 
     try {
-        const response = await fetch(DELETE_API_URL, {
+        // Fetch is done with 'no-cors' mode as required by Google Apps Script web apps
+        await fetch(DELETE_API_URL, {
             method: 'POST',
-            mode: 'no-cors', // Must be no-cors for Apps Script POST
+            mode: 'no-cors', 
             body: JSON.stringify({ timestamps: timestamps })
         });
-
-        // Since it's 'no-cors', we can only rely on the browser not throwing an error.
-        // We will assume success and just reload the table after a delay.
         
+        // Since it's 'no-cors', we assume success and reload.
         showDeleteStatus(`Cancellazione completata. Ricarico dati...`, false);
         setTimeout(drawTable, 2000); // Reload table after 2 seconds
     
